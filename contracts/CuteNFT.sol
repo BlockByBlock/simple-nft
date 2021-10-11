@@ -18,9 +18,9 @@ contract CuteNFT is ERC721URIStorage, Ownable {
     // supply counters
     uint256 public constant MAX_TOKENS = 10000;
     uint256 public constant MAX_PER_MINT = 10;
-    uint256 public constant PRICE = 5000000000000000; // price per mint 0.05E
+    uint256 public constant PRICE = 5000000000000000; // price per mint 0.005E
     address public constant devAddress =
-        0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+        0x6D173418E4D31C4f000098C4d95Ff737AC133C7a;
 
     uint256 public numTokensMinted;
 
@@ -60,6 +60,7 @@ contract CuteNFT is ERC721URIStorage, Ownable {
             _tokenIds.increment();
 
             uint256 newItemId = _tokenIds.current();
+            _mint(_msgSender(), 1 + numTokensMinted++);
             _setTokenURI(
                 newItemId,
                 string(
@@ -70,8 +71,7 @@ contract CuteNFT is ERC721URIStorage, Ownable {
                     )
                 )
             );
-
-            _mint(_msgSender(), 1 + numTokensMinted++);
+            
             emit MintNft(_msgSender(), MAX_TOKENS + 1, _times);
         }
     }
