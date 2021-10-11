@@ -12,7 +12,7 @@ async function main() {
     const nftFactory = await ethers.getContractFactory('CuteNFT');
 
     // contract
-    const nftContract = await nftFactory.deploy();
+    const nftContract = await nftFactory.deploy('https://example.com/');
     console.log(`Contract Address: ${nftContract.address}`);
 
     const data = {

@@ -16,7 +16,7 @@ contract CuteNFT is ERC721URIStorage, Ownable {
     event BaseURIChanged(string baseURI);
 
     // supply counters
-    uint256 public constant MAX_TOKENS = 10000;
+    uint256 public constant totalSupply = 10000;    // etherscan requirement
     uint256 public constant MAX_PER_MINT = 10;
     uint256 public constant PRICE = 5000000000000000; // price per mint 0.005E
     address public constant devAddress =
@@ -29,7 +29,10 @@ contract CuteNFT is ERC721URIStorage, Ownable {
 
     string public baseTokenURI;
 
-    constructor() public ERC721("CuteNFT", "CUTE") {}
+    // Set baseUrl during constructor?
+    constructor(string memory initialURI) public ERC721("CuteNFT", "CUTE") {
+        baseTokenURI = initialURI;
+    }
 
     function setStart(bool _start) public onlyOwner {
         started = _start;
@@ -44,16 +47,17 @@ contract CuteNFT is ERC721URIStorage, Ownable {
         emit BaseURIChanged(baseURI);
     }
 
-    function mintNFT(uint256 _times) public payable {
+    function mint(uint256 _times) public payable {
         require(started, "mint not started");
 
         require(_times > 0 && _times <= MAX_PER_MINT, "incorrect mint number");
-        require(numTokensMinted + _times <= MAX_TOKENS, "mint over!");
+        require(numTokensMinted + _times <= totalSupply, "mint over!");
 
         require(
             msg.value == _times * PRICE,
             "value error, please check price."
         );
+        // pay direct to contract owner
         payable(owner()).transfer(msg.value);
 
         for (uint256 i = 0; i < _times; i++) {
@@ -72,7 +76,7 @@ contract CuteNFT is ERC721URIStorage, Ownable {
                 )
             );
             
-            emit MintNft(_msgSender(), MAX_TOKENS + 1, _times);
+            emit MintNft(_msgSender(), totalSupply + 1, _times);
         }
     }
 
