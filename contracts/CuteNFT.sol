@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 
 contract CuteNFT is ERC721URIStorage, Ownable {
+    using Strings for uint256;
     using Counters for Counters.Counter;
     Counters.Counter private _tokenIds;
 
@@ -17,8 +18,9 @@ contract CuteNFT is ERC721URIStorage, Ownable {
     // supply counters
     uint256 public constant MAX_TOKENS = 10000;
     uint256 public constant MAX_PER_MINT = 10;
-    uint256 public constant PRICE = 5000000000000000;   // price per mint 0.05E
-    address public constant devAddress = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+    uint256 public constant PRICE = 5000000000000000; // price per mint 0.05E
+    address public constant devAddress =
+        0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
 
     uint256 public numTokensMinted;
 
@@ -42,33 +44,35 @@ contract CuteNFT is ERC721URIStorage, Ownable {
         emit BaseURIChanged(baseURI);
     }
 
-    function mintNFT(
-        address recipient,
-        string memory tokenURI,
-        uint256 _times
-    ) payable public {
+    function mintNFT(uint256 _times) public payable {
         require(started, "mint not started");
 
-        require(
-            _times > 0 && _times <= MAX_PER_MINT,
-            "incorrect mint number"
-        );
+        require(_times > 0 && _times <= MAX_PER_MINT, "incorrect mint number");
         require(numTokensMinted + _times <= MAX_TOKENS, "mint over!");
 
-        require(msg.value == _times * PRICE, "value error, please check price.");
+        require(
+            msg.value == _times * PRICE,
+            "value error, please check price."
+        );
         payable(owner()).transfer(msg.value);
 
+        for (uint256 i = 0; i < _times; i++) {
+            _tokenIds.increment();
 
-        _tokenIds.increment();
+            uint256 newItemId = _tokenIds.current();
+            _setTokenURI(
+                newItemId,
+                string(
+                    abi.encodePacked(
+                        baseTokenURI,
+                        newItemId.toString(),
+                        ".json"
+                    )
+                )
+            );
 
-        uint256 newItemId = _tokenIds.current();
-        _mint(recipient, newItemId);
-        _setTokenURI(newItemId, tokenURI);
-
-        emit MintNft(_msgSender(), MAX_TOKENS+1, _times);
-
-        for(uint256 i=0; i< _times; i++){
             _mint(_msgSender(), 1 + numTokensMinted++);
+            emit MintNft(_msgSender(), MAX_TOKENS + 1, _times);
         }
     }
 
@@ -79,7 +83,7 @@ contract CuteNFT is ERC721URIStorage, Ownable {
     }
 
     function _withdraw(address _address, uint256 _amount) private {
-        (bool success, ) = _address.call{ value: _amount }("");
+        (bool success, ) = _address.call{value: _amount}("");
         require(success, "Failed to withdraw Ether");
     }
 }
