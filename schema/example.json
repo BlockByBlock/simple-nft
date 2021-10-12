@@ -1,0 +1,19 @@
+{
+    "name": "CUTE",
+    "description": "This is a cute NFT",
+    "image": "https://gateway.pinata.cloud/ipfs/<hash-code>",
+    "attributes": [
+        {
+            "trait_type": "cuteness",
+            "value": "very"
+        },
+        {
+            "trait_type": "fishy",
+            "value": "69"
+        },
+        {
+            "trait_type": "cai",
+            "value": "png"
+        }
+    ]
+}
