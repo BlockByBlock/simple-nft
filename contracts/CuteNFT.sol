@@ -16,7 +16,7 @@ contract CuteNFT is ERC721URIStorage, Ownable {
     event BaseURIChanged(string baseURI);
 
     // supply counters
-    uint256 public constant totalSupply = 10000;    // etherscan requirement
+    uint256 public constant totalSupply = 10000; // etherscan requirement
     uint256 public constant MAX_PER_MINT = 10;
     uint256 public constant PRICE = 5000000000000000; // price per mint 0.005E
     address public constant devAddress =
@@ -64,18 +64,12 @@ contract CuteNFT is ERC721URIStorage, Ownable {
             _tokenIds.increment();
 
             uint256 newItemId = _tokenIds.current();
-            _mint(_msgSender(), 1 + numTokensMinted++);
+            _safeMint(_msgSender(), 1 + numTokensMinted++);
             _setTokenURI(
                 newItemId,
-                string(
-                    abi.encodePacked(
-                        baseTokenURI,
-                        newItemId.toString(),
-                        ".json"
-                    )
-                )
+                string(abi.encodePacked(newItemId.toString(), ".json"))
             );
-            
+
             emit MintNft(_msgSender(), totalSupply + 1, _times);
         }
     }
