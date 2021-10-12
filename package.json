@@ -4,14 +4,24 @@
   "description": "ERC721 NFT for Ethereum",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "compile": "npx hardhat compile",
+    "precompile": "yarn clean",
+    "pretest": "yarn compile",
+    "clean": "rimraf ./build/",
+    "start": "npx hardhat node",
+    "console": "npx hardhat console --network",
+    "deploy:hardhat": "npx hardhat run scripts/deploy.ts --network hardhat",
+    "deploy:mumbai": "npx hardhat run scripts/deploy.ts --network mumbai",
+    "lint": "yarn prettier --check **/*",
+    "lint:fix": "yarn prettier --write **/*",
+    "test": "mocha"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/BlockByBlock/eth-nft.git"
   },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/BlockByBlock/eth-nft/issues"
   },
@@ -19,12 +29,21 @@
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.2",
     "@nomiclabs/hardhat-etherscan": "^2.1.6",
+    "@nomiclabs/hardhat-waffle": "^2.0.1",
     "@openzeppelin/contracts": "^4.3.2",
+    "@typechain/ethers-v5": "^7.1.2",
+    "@typechain/hardhat": "^2.3.0",
+    "@types/chai": "^4.2.22",
+    "@types/mocha": "^9.0.0",
+    "chai": "^4.3.4",
     "dotenv": "^10.0.0",
+    "ethereum-waffle": "^3.4.0",
+    "ethers": "^5.0.0",
     "hardhat": "^2.6.5",
     "prettier": "^2.4.1",
     "prettier-plugin-solidity": "^1.0.0-beta.18",
     "ts-node": "^10.2.1",
+    "typechain": "^5.1.2",
     "typescript": "^4.4.3"
   },
   "dependencies": {}
