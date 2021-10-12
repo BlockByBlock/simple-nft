@@ -4,6 +4,7 @@ dist
 build
 node_modules
 package-lock.json
+.log
 
 # typechain
 typechain
