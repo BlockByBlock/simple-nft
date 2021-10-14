@@ -10,8 +10,11 @@ describe('CuteNFT', () => {
   let owner: SignerWithAddress;
   let minter: SignerWithAddress;
 
+  // eg marketplace
+  let operator: SignerWithAddress;
+
   before(async () => {
-    [owner, minter] = await ethers.getSigners();
+    [owner, minter, operator] = await ethers.getSigners();
 
     const cuteNftFactory = new CuteNFT__factory(owner);
     cuteNftContract = await cuteNftFactory.deploy('https://example.com/');
@@ -28,9 +31,10 @@ describe('CuteNFT', () => {
       // start mint
       await cuteNftContract.connect(owner).setStart(true);
 
-      await expect(
-        await cuteNftContract.connect(minter).mint(1, { value: ethers.utils.parseEther('0.005') }),
-      ).to.emit(cuteNftContract, 'MintNft');
+      await expect(await cuteNftContract.connect(minter).mint(1, { value: ethers.utils.parseEther('0.005') })).to.emit(
+        cuteNftContract,
+        'MintNft',
+      );
     });
 
     it('should not mint as a minter with insufficient ether', async () => {
@@ -59,8 +63,43 @@ describe('CuteNFT', () => {
   });
 
   // transfer token
-  // transfer
+  describe('transfer', async () => {
+    it('should successfully transfer token', async () => {
+      await expect(await cuteNftContract.connect(minter).transferFrom(minter.address, owner.address, 1)).to.emit(
+        cuteNftContract,
+        'Transfer',
+      );
+    });
+
+    it('should allow operator to transfer token', async () => {
+      await expect(await cuteNftContract.connect(minter).setApprovalForAll(operator.address, true)).to.emit(
+        cuteNftContract,
+        'ApprovalForAll',
+      );
+
+      expect(await cuteNftContract.isApprovedForAll(minter.address, operator.address)).to.be.true;
+
+      await expect(await cuteNftContract.connect(operator).transferFrom(minter.address, owner.address, 2)).to.emit(
+        cuteNftContract,
+        'Transfer',
+      );
+    });
+  });
+
+  describe('getTotalSupply', async () => {
+    it('should return total supply', async () => {
+      expect(await cuteNftContract.totalSupply()).to.be.eq(10000);
+    });
+  });
 
   // retrieve baseUrl
-  // get totalsupply
+  describe('baseUrl', async () => {
+    it('should return baseUri', async () => {
+      expect(await cuteNftContract.baseTokenURI()).to.be.not.empty;
+    });
+
+    it('should set baseUri', async () => {
+      expect(await cuteNftContract.connect(owner).setBaseURI('google.com')).to.emit(cuteNftContract, 'BaseURIChanged');
+    });
+  });
 });
