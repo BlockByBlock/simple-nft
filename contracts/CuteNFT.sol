@@ -30,7 +30,7 @@ contract CuteNFT is ERC721URIStorage, Ownable {
     string public baseTokenURI;
 
     // Set baseUrl during constructor?
-    constructor(string memory initialURI) public ERC721("CuteNFT", "CUTE") {
+    constructor(string memory initialURI) ERC721("CuteNFT", "CUTE") {
         baseTokenURI = initialURI;
     }
 
