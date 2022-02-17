@@ -11,18 +11,8 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 contract CuteNFT is ERC721A, Ownable, ReentrancyGuard {
     uint256 public immutable maxPerAddressDuringMint;
     uint256 public immutable reserveForTeam;
-    uint256 public immutable reserveForAuctionAndTeam;
-
-    uint256 public constant AUCTION_START_PRICE = 1 ether;
-    uint256 public constant AUCTION_END_PRICE = 0.15 ether;
-    uint256 public constant AUCTION_PRICE_CURVE_LENGTH = 340 minutes;
-    uint256 public constant AUCTION_DROP_INTERVAL = 20 minutes;
-    uint256 public constant AUCTION_DROP_PER_STEP =
-        (AUCTION_START_PRICE - AUCTION_END_PRICE) /
-            (AUCTION_PRICE_CURVE_LENGTH / AUCTION_DROP_INTERVAL);
 
     struct SaleConfig {
-        uint32 auctionSaleStartTime;
         uint32 publicSaleStartTime;
         uint64 mintlistPrice;
         uint64 publicPrice;
@@ -36,12 +26,10 @@ contract CuteNFT is ERC721A, Ownable, ReentrancyGuard {
     constructor(
         uint256 maxBatchSize_,
         uint256 collectionSize_,
-        uint256 reserveForTeam_,
-        uint256 reserveForAuctionAndTeam_
+        uint256 reserveForTeam_
     ) ERC721A("Cute", "CUTE", maxBatchSize_, collectionSize_) {
         maxPerAddressDuringMint = maxBatchSize_;
         reserveForTeam = reserveForTeam_;
-        reserveForAuctionAndTeam = reserveForAuctionAndTeam_;
         require(
             reserveForTeam_ <= collectionSize_,
             "larger collection size needed"
@@ -53,61 +41,18 @@ contract CuteNFT is ERC721A, Ownable, ReentrancyGuard {
         _;
     }
 
-    function getAuctionPrice(uint256 _saleStartTime)
-        public
-        view
-        returns (uint256)
-    {
-        if (block.timestamp < _saleStartTime) {
-            return AUCTION_START_PRICE;
-        }
-        if (block.timestamp - _saleStartTime >= AUCTION_PRICE_CURVE_LENGTH) {
-            return AUCTION_END_PRICE;
-        } else {
-            uint256 steps = (block.timestamp - _saleStartTime) /
-                AUCTION_DROP_INTERVAL;
-            return AUCTION_START_PRICE - (steps * AUCTION_DROP_PER_STEP);
-        }
-    }
-
-    function refundIfOver(uint256 price) private {
-        require(msg.value >= price, "Need to send more ETH.");
-        if (msg.value > price) {
-            payable(msg.sender).transfer(msg.value - price);
-        }
-    }
-
-    function isPublicSaleOn(
-        uint256 publicPriceWei,
-        uint256 publicSaleKey,
-        uint256 publicSaleStartTime
-    ) public view returns (bool) {
-        return
-            publicPriceWei != 0 &&
-            publicSaleKey != 0 &&
-            block.timestamp >= publicSaleStartTime;
-    }
-
-    function endAuctionAndSetupNonAuctionSaleInfo(
+    function setSaleConfig(
+        uint32 publicSaleStartTime,
         uint64 mintlistPriceWei,
         uint64 publicPriceWei,
-        uint32 publicSaleStartTime
+        uint32 key
     ) external onlyOwner {
         saleConfig = SaleConfig(
-            0,
             publicSaleStartTime,
             mintlistPriceWei,
             publicPriceWei,
-            saleConfig.publicSaleKey
+            key
         );
-    }
-
-    function setAuctionSaleStartTime(uint32 timestamp) external onlyOwner {
-        saleConfig.auctionSaleStartTime = timestamp;
-    }
-
-    function setPublicSaleKey(uint32 key) external onlyOwner {
-        saleConfig.publicSaleKey = key;
     }
 
     function seedAllowlist(
@@ -139,23 +84,22 @@ contract CuteNFT is ERC721A, Ownable, ReentrancyGuard {
         }
     }
 
-    function auctionMint(uint256 quantity) external payable callerIsUser {
-        uint256 _saleStartTime = uint256(saleConfig.auctionSaleStartTime);
-        require(
-            _saleStartTime != 0 && block.timestamp >= _saleStartTime,
-            "sale has not started yet"
-        );
-        require(
-            totalSupply() + quantity <= reserveForAuctionAndTeam,
-            "not enough remaining reserved for auction to support desired mint amount"
-        );
-        require(
-            numberMinted(msg.sender) + quantity <= maxPerAddressDuringMint,
-            "can not mint this many"
-        );
-        uint256 totalCost = getAuctionPrice(_saleStartTime) * quantity;
-        _safeMint(msg.sender, quantity);
-        refundIfOver(totalCost);
+    function isPublicSaleOn(
+        uint256 publicPriceWei,
+        uint256 publicSaleKey,
+        uint256 publicSaleStartTime
+    ) public view returns (bool) {
+        return
+            publicPriceWei != 0 &&
+            publicSaleKey != 0 &&
+            block.timestamp >= publicSaleStartTime;
+    }
+
+    function refundIfOver(uint256 price) private {
+        require(msg.value >= price, "Need to send more ETH.");
+        if (msg.value > price) {
+            payable(msg.sender).transfer(msg.value - price);
+        }
     }
 
     function allowlistMint() external payable callerIsUser {
