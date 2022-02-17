@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import { Contract } from 'ethers';
 import { ethers } from 'hardhat';
 
-import { CuteNFT__factory } from '../typechain';
+import { CuteNFT__factory, Ownable__factory } from '../typechain';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
 
 describe('CuteNFT', () => {
@@ -90,13 +90,16 @@ describe('CuteNFT', () => {
     });
 
     it('should successfully mint as minterOne', async () => {
-      // todo: test balance
       await cuteNftContract
         .connect(owner)
         .setSaleConfig('1645115250', ethers.utils.parseEther('0.1'), ethers.utils.parseEther('0.5'), '12345678');
 
+      const preBalance = await minterOne.getBalance();
+      const postBalance = preBalance.sub(ethers.utils.parseEther('0.1'));
+
       await cuteNftContract.connect(minterOne).allowlistMint({ value: ethers.utils.parseEther('0.1') });
       expect(await cuteNftContract.numberMinted(minterOne.address)).to.eq(1);
+      expect(await minterOne.getBalance()).to.be.closeTo(postBalance, 1000000000000000);
     });
 
     it('should revert if mint beyond allowed number', async () => {
@@ -106,9 +109,14 @@ describe('CuteNFT', () => {
     });
 
     it('should successfully mint as minterTwo', async () => {
+      const preBalance = await minterTwo.getBalance();
+      const postBalance = preBalance.sub(ethers.utils.parseEther('0.2'));
+
       await cuteNftContract.connect(minterTwo).allowlistMint({ value: ethers.utils.parseEther('0.1') });
-      await cuteNftContract.connect(minterTwo).allowlistMint({ value: ethers.utils.parseEther('0.1') });
+      await cuteNftContract.connect(minterTwo).allowlistMint({ value: ethers.utils.parseEther('0.1') }); 
+
       expect(await cuteNftContract.numberMinted(minterTwo.address)).to.eq(2);
+      expect(await minterTwo.getBalance()).to.be.closeTo(postBalance, 1000000000000000);
     });
 
     it('should not mint as minterThree', async () => {
