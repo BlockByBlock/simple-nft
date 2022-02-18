@@ -20,6 +20,9 @@ describe('CuteNFT', () => {
 
   let provider: Provider;
 
+  // eg marketplace
+  let operator: SignerWithAddress;
+
   before(async () => {
     [owner, minterOne, minterTwo, minterThree, minterFour] = await ethers.getSigners();
     provider = owner.provider as Provider;
