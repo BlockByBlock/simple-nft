@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import { Contract } from 'ethers';
 import { ethers } from 'hardhat';
 
-import { CuteNFT__factory, Ownable__factory } from '../typechain';
+import { CuteNFT__factory } from '../typechain';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
 import { Provider } from '@ethersproject/abstract-provider';
 
@@ -162,6 +162,24 @@ describe('CuteNFT', () => {
       expect(await cuteNftContract.numberMinted(minterFour.address)).to.eq(5);
       expect(await minterFour.getBalance()).to.be.closeTo(postBalance, 1000000000000000);
       expect(await provider.getBalance(cuteNftContract.address)).to.eq(ethers.utils.parseEther('3.3'));
+    });
+  });
+
+  describe('withdrawMoney()', async () => {
+    it('should not withdraw as non owner', async () => {
+      const balance = await provider.getBalance(cuteNftContract.address);
+      expect(cuteNftContract.connect(minterOne).withdrawMoney()).to.be.revertedWith('Ownable');
+      expect(await provider.getBalance(cuteNftContract.address)).to.eq(balance);
+    });
+
+    it('should withdraw as owner', async () => {
+      const balance = await provider.getBalance(cuteNftContract.address);
+      const ownerBalance = await owner.getBalance();
+      const postBalance = ownerBalance.add(balance);
+  
+      await cuteNftContract.connect(owner).withdrawMoney();
+      expect(await provider.getBalance(cuteNftContract.address)).to.eq('0');
+      expect(await owner.getBalance()).to.be.closeTo(postBalance, 1000000000000000);
     });
   });
 });
