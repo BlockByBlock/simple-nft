@@ -4,102 +4,185 @@ import { ethers } from 'hardhat';
 
 import { CuteNFT__factory } from '../typechain';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
+import { Provider } from '@ethersproject/abstract-provider';
 
 describe('CuteNFT', () => {
   let cuteNftContract: Contract;
   let owner: SignerWithAddress;
-  let minter: SignerWithAddress;
+
+  // whitelist
+  let minterOne: SignerWithAddress;
+  let minterTwo: SignerWithAddress;
+
+  // public
+  let minterThree: SignerWithAddress;
+  let minterFour: SignerWithAddress;
+
+  let provider: Provider;
 
   // eg marketplace
   let operator: SignerWithAddress;
 
   before(async () => {
-    [owner, minter, operator] = await ethers.getSigners();
+    [owner, minterOne, minterTwo, minterThree, minterFour] = await ethers.getSigners();
+    provider = owner.provider as Provider;
 
     const cuteNftFactory = new CuteNFT__factory(owner);
-    cuteNftContract = await cuteNftFactory.deploy('https://example.com/');
+    cuteNftContract = await cuteNftFactory.deploy('5', '10000', '20');
   });
 
-  describe('mint', async () => {
-    it('should not mint as contract start is false', async () => {
-      await expect(
-        cuteNftContract.connect(minter).mint(1, { value: ethers.utils.parseEther('0.005') }),
-      ).to.revertedWith('mint not started');
+  describe('setSaleConfig()', async () => {
+    it('should successfully set config as owner', async () => {
+      await cuteNftContract.connect(owner).setSaleConfig('1645115250', '0', ethers.utils.parseEther('0.5'), '12345678');
+
+      const saleConfig = await cuteNftContract.saleConfig();
+      expect(saleConfig[0]).to.eq(1645115250);
+      expect(saleConfig[1]).to.eq(ethers.utils.parseEther('0'));
+      expect(saleConfig[2]).to.eq(ethers.utils.parseEther('0.5'));
+      expect(saleConfig[3]).to.eq(12345678);
     });
 
-    it('should successfully mint as a minter', async () => {
-      // start mint
-      await cuteNftContract.connect(owner).setStart(true);
-
-      await expect(await cuteNftContract.connect(minter).mint(1, { value: ethers.utils.parseEther('0.005') })).to.emit(
-        cuteNftContract,
-        'MintNft',
-      );
-    });
-
-    it('should not mint as a minter with insufficient ether', async () => {
-      await expect(
-        cuteNftContract.connect(minter).mint(1, { value: ethers.utils.parseEther('0.0049') }),
-      ).to.revertedWith('value error, please check price');
-    });
-
-    it('should not mint as a minter with insufficient ether for 2', async () => {
-      await expect(
-        cuteNftContract.connect(minter).mint(2, { value: ethers.utils.parseEther('0.005') }),
-      ).to.revertedWith('value error, please check price');
-    });
-
-    it('should not mint as a minter with 0 token', async () => {
-      await expect(
-        cuteNftContract.connect(minter).mint(0, { value: ethers.utils.parseEther('0.005') }),
-      ).to.revertedWith('incorrect mint number');
-    });
-
-    it('should pay owner for 1 mint', async () => {
-      const beforeMintBalance = await owner.getBalance();
-      await cuteNftContract.connect(minter).mint(1, { value: ethers.utils.parseEther('0.005') });
-      expect(await owner.getBalance()).to.be.eq(beforeMintBalance.add(ethers.utils.parseEther('0.005')));
+    it('should not set config as non-owner', async () => {
+      expect(
+        cuteNftContract.connect(minterOne).setSaleConfig('1645115250', '0', ethers.utils.parseEther('0.5'), '12345678'),
+      ).to.be.revertedWith('Ownable');
     });
   });
 
-  // transfer token
-  describe('transfer', async () => {
-    it('should successfully transfer token', async () => {
-      await expect(await cuteNftContract.connect(minter).transferFrom(minter.address, owner.address, 1)).to.emit(
-        cuteNftContract,
-        'Transfer',
+  describe('seedAllowlist()', async () => {
+    it('should successfully set list as owner', async () => {
+      await cuteNftContract.connect(owner).seedAllowlist([minterOne.address, minterTwo.address], ['1', '2']);
+
+      expect(await cuteNftContract.allowlist(minterOne.address)).to.eq(1);
+      expect(await cuteNftContract.allowlist(minterTwo.address)).to.eq(2);
+    });
+
+    it('should not set list as non-owner', async () => {
+      expect(
+        cuteNftContract.connect(minterOne).seedAllowlist([minterOne.address, minterTwo.address], ['1', '2']),
+      ).to.be.revertedWith('Ownable');
+    });
+  });
+
+  describe('devMint()', async () => {
+    it('should not mint as owner exceeding reserve', async () => {
+      expect(cuteNftContract.connect(owner).devMint('21')).to.be.revertedWith(
+        'too many already minted before dev mint',
       );
     });
 
-    it('should allow operator to transfer token', async () => {
-      await expect(await cuteNftContract.connect(minter).setApprovalForAll(operator.address, true)).to.emit(
-        cuteNftContract,
-        'ApprovalForAll',
+    it('should not mint as owner without batch size', async () => {
+      expect(cuteNftContract.connect(owner).devMint('19')).to.be.revertedWith(
+        'can only mint a multiple of the maxBatchSize',
       );
+    });
 
-      expect(await cuteNftContract.isApprovedForAll(minter.address, operator.address)).to.be.true;
+    it('should successfully mint as owner', async () => {
+      await cuteNftContract.connect(owner).devMint('20');
+      expect(await cuteNftContract.numberMinted(owner.address)).to.eq(20);
+    });
 
-      await expect(await cuteNftContract.connect(operator).transferFrom(minter.address, owner.address, 2)).to.emit(
-        cuteNftContract,
-        'Transfer',
+    it('should not mint as owner after limit', async () => {
+      expect(cuteNftContract.connect(owner).devMint('5')).to.be.revertedWith('too many already minted before dev mint');
+    });
+
+    it('should not set mint as non-owner', async () => {
+      expect(cuteNftContract.connect(minterOne).devMint('20')).to.be.revertedWith('Ownable');
+    });
+  });
+
+  describe('allowlistMint()', async () => {
+    it('should not mint without price', async () => {
+      expect(cuteNftContract.connect(minterOne).allowlistMint()).to.be.revertedWith('allowlist sale has not begun yet');
+    });
+
+    it('should successfully mint as minterOne', async () => {
+      await cuteNftContract
+        .connect(owner)
+        .setSaleConfig('1645115250', ethers.utils.parseEther('0.1'), ethers.utils.parseEther('0.5'), '12345678');
+
+      const preBalance = await minterOne.getBalance();
+      const postBalance = preBalance.sub(ethers.utils.parseEther('0.1'));
+
+      await cuteNftContract.connect(minterOne).allowlistMint({ value: ethers.utils.parseEther('0.1') });
+      expect(await cuteNftContract.numberMinted(minterOne.address)).to.eq(1);
+      expect(await minterOne.getBalance()).to.be.closeTo(postBalance, 1000000000000000);
+      expect(await provider.getBalance(cuteNftContract.address)).to.eq(ethers.utils.parseEther('0.1'));
+    });
+
+    it('should revert if mint beyond allowed number', async () => {
+      expect(cuteNftContract.connect(minterOne).allowlistMint({ value: ethers.utils.parseEther('0.1') }))
+        .to.be.revertedWith('not eligible for allowlist mint')
+      expect(await cuteNftContract.numberMinted(minterOne.address)).to.eq(1);
+    });
+
+    it('should successfully mint as minterTwo', async () => {
+      const preBalance = await minterTwo.getBalance();
+      const postBalance = preBalance.sub(ethers.utils.parseEther('0.2'));
+
+      await cuteNftContract.connect(minterTwo).allowlistMint({ value: ethers.utils.parseEther('0.1') });
+      await cuteNftContract.connect(minterTwo).allowlistMint({ value: ethers.utils.parseEther('0.1') });
+
+      expect(await cuteNftContract.numberMinted(minterTwo.address)).to.eq(2);
+      expect(await minterTwo.getBalance()).to.be.closeTo(postBalance, 1000000000000000);
+      expect(await provider.getBalance(cuteNftContract.address)).to.eq(ethers.utils.parseEther('0.3'));
+    });
+
+    it('should not mint as minterThree', async () => {
+      expect(cuteNftContract.connect(minterThree).allowlistMint()).to.be.revertedWith(
+        'not eligible for allowlist mint',
       );
     });
   });
 
-  describe('getTotalSupply', async () => {
-    it('should return total supply', async () => {
-      expect(await cuteNftContract.totalSupply()).to.be.eq(10000);
+  describe('publicSaleMint()', async () => {
+    it('should not public mint with wrong key', async () => {
+      expect(cuteNftContract.connect(minterThree).publicSaleMint('1', '1234567', { value: ethers.utils.parseEther('0.5') }))
+        .to.be.revertedWith('called with incorrect public sale key');
+    });
+
+    it('should successfully mint as minterThree', async () => {
+      const preBalance = await minterThree.getBalance();
+      const postBalance = preBalance.sub(ethers.utils.parseEther('0.5'));
+
+      await cuteNftContract.connect(minterThree).publicSaleMint('1', '12345678', { value: ethers.utils.parseEther('0.5') });
+      expect(await cuteNftContract.numberMinted(minterThree.address)).to.eq('1');
+      expect(await minterThree.getBalance()).to.be.closeTo(postBalance, 1000000000000000);
+      expect(await provider.getBalance(cuteNftContract.address)).to.eq(ethers.utils.parseEther('0.8'));
+    });
+
+    it('should revert if mint beyond allowed number', async () => {
+      expect(cuteNftContract.connect(minterOne).publicSaleMint('6', '12345678', { value: ethers.utils.parseEther('0.5') }))
+        .to.be.revertedWith('can not mint this many');
+    });
+
+    it('should successfully mint max as minterFour', async () => {
+      const preBalance = await minterFour.getBalance();
+      const postBalance = preBalance.sub(ethers.utils.parseEther('2.5'));
+
+      await cuteNftContract.connect(minterFour).publicSaleMint('5', '12345678', { value: ethers.utils.parseEther('2.5') });
+
+      expect(await cuteNftContract.numberMinted(minterFour.address)).to.eq(5);
+      expect(await minterFour.getBalance()).to.be.closeTo(postBalance, 1000000000000000);
+      expect(await provider.getBalance(cuteNftContract.address)).to.eq(ethers.utils.parseEther('3.3'));
     });
   });
 
-  // retrieve baseUrl
-  describe('baseUrl', async () => {
-    it('should return baseUri', async () => {
-      expect(await cuteNftContract.baseTokenURI()).to.be.not.empty;
+  describe('withdrawMoney()', async () => {
+    it('should not withdraw as non owner', async () => {
+      const balance = await provider.getBalance(cuteNftContract.address);
+      expect(cuteNftContract.connect(minterOne).withdrawMoney()).to.be.revertedWith('Ownable');
+      expect(await provider.getBalance(cuteNftContract.address)).to.eq(balance);
     });
 
-    it('should set baseUri', async () => {
-      expect(await cuteNftContract.connect(owner).setBaseURI('google.com')).to.emit(cuteNftContract, 'BaseURIChanged');
+    it('should withdraw as owner', async () => {
+      const balance = await provider.getBalance(cuteNftContract.address);
+      const ownerBalance = await owner.getBalance();
+      const postBalance = ownerBalance.add(balance);
+  
+      await cuteNftContract.connect(owner).withdrawMoney();
+      expect(await provider.getBalance(cuteNftContract.address)).to.eq('0');
+      expect(await owner.getBalance()).to.be.closeTo(postBalance, 1000000000000000);
     });
   });
 });

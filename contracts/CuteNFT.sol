@@ -1,87 +1,180 @@
-//Contract based on [https://docs.openzeppelin.com/contracts/3.x/erc721](https://docs.openzeppelin.com/contracts/3.x/erc721)
+// Credit to Azuki
+// https://etherscan.io/address/0xed5af388653567af2f388e6224dc7c4b3241c544#code
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
+import "./ERC721A.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
-contract CuteNFT is ERC721URIStorage, Ownable {
-    using Strings for uint256;
-    using Counters for Counters.Counter;
-    Counters.Counter private _tokenIds;
+contract CuteNFT is ERC721A, Ownable, ReentrancyGuard {
+    uint256 public immutable maxPerAddressDuringMint;
+    uint256 public immutable reserveForTeam;
 
-    event MintNft(address indexed sender, uint256 startWith, uint256 times);
-    event BaseURIChanged(string baseURI);
-
-    // supply counters
-    uint256 public constant totalSupply = 10000; // etherscan requirement
-    uint256 public constant MAX_PER_MINT = 10;
-    uint256 public constant PRICE = 5000000000000000; // price per mint 0.005E
-    address public constant devAddress =
-        0x6D173418E4D31C4f000098C4d95Ff737AC133C7a;
-
-    uint256 public numTokensMinted;
-
-    // mint start
-    bool private started;
-
-    string public baseTokenURI;
-
-    // Set baseUrl during constructor?
-    constructor(string memory initialURI) ERC721("CuteNFT", "CUTE") {
-        baseTokenURI = initialURI;
+    struct SaleConfig {
+        uint32 publicSaleStartTime;
+        uint64 mintlistPrice;
+        uint64 publicPrice;
+        uint32 publicSaleKey;
     }
 
-    function setStart(bool _start) public onlyOwner {
-        started = _start;
-    }
+    SaleConfig public saleConfig;
 
-    function _baseURI() internal view virtual override returns (string memory) {
-        return baseTokenURI;
-    }
+    mapping(address => uint256) public allowlist;
 
-    function setBaseURI(string memory baseURI) public onlyOwner {
-        baseTokenURI = baseURI;
-        emit BaseURIChanged(baseURI);
-    }
-
-    function mint(uint256 _times) public payable {
-        require(started, "mint not started");
-
-        require(_times > 0 && _times <= MAX_PER_MINT, "incorrect mint number");
-        require(numTokensMinted + _times <= totalSupply, "mint over!");
-
+    constructor(
+        uint256 maxBatchSize_,
+        uint256 collectionSize_,
+        uint256 reserveForTeam_
+    ) ERC721A("Cute", "CUTE", maxBatchSize_, collectionSize_) {
+        maxPerAddressDuringMint = maxBatchSize_;
+        reserveForTeam = reserveForTeam_;
         require(
-            msg.value == _times * PRICE,
-            "value error, please check price."
+            reserveForTeam_ <= collectionSize_,
+            "larger collection size needed"
         );
-        // pay direct to contract owner
-        payable(owner()).transfer(msg.value);
+    }
 
-        for (uint256 i = 0; i < _times; i++) {
-            _tokenIds.increment();
+    modifier callerIsUser() {
+        require(tx.origin == msg.sender, "The caller is another contract");
+        _;
+    }
 
-            uint256 newItemId = _tokenIds.current();
-            _safeMint(_msgSender(), 1 + numTokensMinted++);
-            _setTokenURI(
-                newItemId,
-                string(abi.encodePacked(newItemId.toString(), ".json"))
-            );
+    function setSaleConfig(
+        uint32 publicSaleStartTime,
+        uint64 mintlistPriceWei,
+        uint64 publicPriceWei,
+        uint32 key
+    ) external onlyOwner {
+        saleConfig = SaleConfig(
+            publicSaleStartTime,
+            mintlistPriceWei,
+            publicPriceWei,
+            key
+        );
+    }
 
-            emit MintNft(_msgSender(), totalSupply + 1, _times);
+    function seedAllowlist(
+        address[] memory addresses,
+        uint256[] memory numSlots
+    ) external onlyOwner {
+        require(
+            addresses.length == numSlots.length,
+            "addresses does not match numSlots length"
+        );
+        for (uint256 i = 0; i < addresses.length; i++) {
+            allowlist[addresses[i]] = numSlots[i];
         }
     }
 
-    function withdrawAll() public onlyOwner {
-        uint256 balance = address(this).balance;
-        require(balance > 0, "Insufficent balance");
-        _withdraw(devAddress, balance);
+    // For marketing etc.
+    function devMint(uint256 quantity) external onlyOwner {
+        require(
+            totalSupply() + quantity <= reserveForTeam,
+            "too many already minted before dev mint"
+        );
+        require(
+            quantity % maxBatchSize == 0,
+            "can only mint a multiple of the maxBatchSize"
+        );
+        uint256 numChunks = quantity / maxBatchSize;
+        for (uint256 i = 0; i < numChunks; i++) {
+            _safeMint(msg.sender, maxBatchSize);
+        }
     }
 
-    function _withdraw(address _address, uint256 _amount) private {
-        (bool success, ) = _address.call{value: _amount}("");
-        require(success, "Failed to withdraw Ether");
+    function isPublicSaleOn(
+        uint256 publicPriceWei,
+        uint256 publicSaleKey,
+        uint256 publicSaleStartTime
+    ) public view returns (bool) {
+        return
+            publicPriceWei != 0 &&
+            publicSaleKey != 0 &&
+            block.timestamp >= publicSaleStartTime;
+    }
+
+    function refundIfOver(uint256 price) private {
+        require(msg.value >= price, "Need to send more ETH.");
+        if (msg.value > price) {
+            payable(msg.sender).transfer(msg.value - price);
+        }
+    }
+
+    function allowlistMint() external payable callerIsUser {
+        uint256 price = uint256(saleConfig.mintlistPrice);
+        require(price != 0, "allowlist sale has not begun yet");
+        require(allowlist[msg.sender] > 0, "not eligible for allowlist mint");
+        require(totalSupply() + 1 <= collectionSize, "reached max supply");
+        allowlist[msg.sender]--;
+        _safeMint(msg.sender, 1);
+        refundIfOver(price);
+    }
+
+    function publicSaleMint(uint256 quantity, uint256 callerPublicSaleKey)
+        external
+        payable
+        callerIsUser
+    {
+        SaleConfig memory config = saleConfig;
+        uint256 publicSaleKey = uint256(config.publicSaleKey);
+        uint256 publicPrice = uint256(config.publicPrice);
+        uint256 publicSaleStartTime = uint256(config.publicSaleStartTime);
+        require(
+            publicSaleKey == callerPublicSaleKey,
+            "called with incorrect public sale key"
+        );
+
+        require(
+            isPublicSaleOn(publicPrice, publicSaleKey, publicSaleStartTime),
+            "public sale has not begun yet"
+        );
+        require(
+            totalSupply() + quantity <= collectionSize,
+            "reached max supply"
+        );
+        require(
+            numberMinted(msg.sender) + quantity <= maxPerAddressDuringMint,
+            "can not mint this many"
+        );
+        _safeMint(msg.sender, quantity);
+        refundIfOver(publicPrice * quantity);
+    }
+
+    // // metadata URI
+    string private _baseTokenURI;
+
+    function _baseURI() internal view virtual override returns (string memory) {
+        return _baseTokenURI;
+    }
+
+    function setBaseURI(string calldata baseURI) external onlyOwner {
+        _baseTokenURI = baseURI;
+    }
+
+    function withdrawMoney() external onlyOwner nonReentrant {
+        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        require(success, "Transfer failed.");
+    }
+
+    function setOwnersExplicit(uint256 quantity)
+        external
+        onlyOwner
+        nonReentrant
+    {
+        _setOwnersExplicit(quantity);
+    }
+
+    function numberMinted(address _owner) public view returns (uint256) {
+        return _numberMinted(_owner);
+    }
+
+    function getOwnershipData(uint256 tokenId)
+        external
+        view
+        returns (TokenOwnership memory)
+    {
+        return ownershipOf(tokenId);
     }
 }
