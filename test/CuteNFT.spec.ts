@@ -4,6 +4,7 @@ import { ethers } from 'hardhat';
 
 import { CuteNFT__factory, Ownable__factory } from '../typechain';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
+import { Provider } from '@ethersproject/abstract-provider';
 
 describe('CuteNFT', () => {
   let cuteNftContract: Contract;
@@ -17,8 +18,11 @@ describe('CuteNFT', () => {
   let minterThree: SignerWithAddress;
   let minterFour: SignerWithAddress;
 
+  let provider: Provider;
+
   before(async () => {
     [owner, minterOne, minterTwo, minterThree, minterFour] = await ethers.getSigners();
+    provider = owner.provider as Provider;
 
     const cuteNftFactory = new CuteNFT__factory(owner);
     cuteNftContract = await cuteNftFactory.deploy('5', '10000', '20');
@@ -100,6 +104,7 @@ describe('CuteNFT', () => {
       await cuteNftContract.connect(minterOne).allowlistMint({ value: ethers.utils.parseEther('0.1') });
       expect(await cuteNftContract.numberMinted(minterOne.address)).to.eq(1);
       expect(await minterOne.getBalance()).to.be.closeTo(postBalance, 1000000000000000);
+      expect(await provider.getBalance(cuteNftContract.address)).to.eq(ethers.utils.parseEther('0.1'));
     });
 
     it('should revert if mint beyond allowed number', async () => {
@@ -113,16 +118,50 @@ describe('CuteNFT', () => {
       const postBalance = preBalance.sub(ethers.utils.parseEther('0.2'));
 
       await cuteNftContract.connect(minterTwo).allowlistMint({ value: ethers.utils.parseEther('0.1') });
-      await cuteNftContract.connect(minterTwo).allowlistMint({ value: ethers.utils.parseEther('0.1') }); 
+      await cuteNftContract.connect(minterTwo).allowlistMint({ value: ethers.utils.parseEther('0.1') });
 
       expect(await cuteNftContract.numberMinted(minterTwo.address)).to.eq(2);
       expect(await minterTwo.getBalance()).to.be.closeTo(postBalance, 1000000000000000);
+      expect(await provider.getBalance(cuteNftContract.address)).to.eq(ethers.utils.parseEther('0.3'));
     });
 
     it('should not mint as minterThree', async () => {
       expect(cuteNftContract.connect(minterThree).allowlistMint()).to.be.revertedWith(
         'not eligible for allowlist mint',
       );
+    });
+  });
+
+  describe('publicSaleMint()', async () => {
+    it('should not public mint with wrong key', async () => {
+      expect(cuteNftContract.connect(minterThree).publicSaleMint('1', '1234567', { value: ethers.utils.parseEther('0.5') }))
+        .to.be.revertedWith('called with incorrect public sale key');
+    });
+
+    it('should successfully mint as minterThree', async () => {
+      const preBalance = await minterThree.getBalance();
+      const postBalance = preBalance.sub(ethers.utils.parseEther('0.5'));
+
+      await cuteNftContract.connect(minterThree).publicSaleMint('1', '12345678', { value: ethers.utils.parseEther('0.5') });
+      expect(await cuteNftContract.numberMinted(minterThree.address)).to.eq('1');
+      expect(await minterThree.getBalance()).to.be.closeTo(postBalance, 1000000000000000);
+      expect(await provider.getBalance(cuteNftContract.address)).to.eq(ethers.utils.parseEther('0.8'));
+    });
+
+    it('should revert if mint beyond allowed number', async () => {
+      expect(cuteNftContract.connect(minterOne).publicSaleMint('6', '12345678', { value: ethers.utils.parseEther('0.5') }))
+        .to.be.revertedWith('can not mint this many');
+    });
+
+    it('should successfully mint max as minterFour', async () => {
+      const preBalance = await minterFour.getBalance();
+      const postBalance = preBalance.sub(ethers.utils.parseEther('2.5'));
+
+      await cuteNftContract.connect(minterFour).publicSaleMint('5', '12345678', { value: ethers.utils.parseEther('2.5') });
+
+      expect(await cuteNftContract.numberMinted(minterFour.address)).to.eq(5);
+      expect(await minterFour.getBalance()).to.be.closeTo(postBalance, 1000000000000000);
+      expect(await provider.getBalance(cuteNftContract.address)).to.eq(ethers.utils.parseEther('3.3'));
     });
   });
 });
