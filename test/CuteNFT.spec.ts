@@ -91,6 +91,18 @@ describe('CuteNFT', () => {
     });
   });
 
+  describe('setBaseURI', async () => {
+    it('should set baseuri as owner', async () => {
+      await cuteNftContract.connect(owner).setBaseURI('https://cutenft.s3-us-west-1.amazonaws.com/metadata/');
+      expect(await cuteNftContract.tokenURI('1')).to.eq('https://cutenft.s3-us-west-1.amazonaws.com/metadata/1');
+    });
+
+    it('should set new baseuri as owner', async () => {
+      await cuteNftContract.connect(owner).setBaseURI('https://asdfghjkl.mypinata.cloud/ipfs/qwertyuiop/');
+      expect(await cuteNftContract.tokenURI('11')).to.eq('https://asdfghjkl.mypinata.cloud/ipfs/qwertyuiop/11');
+    });
+  });
+
   describe('allowlistMint()', async () => {
     it('should not mint without price', async () => {
       expect(cuteNftContract.connect(minterOne).allowlistMint()).to.be.revertedWith('allowlist sale has not begun yet');
