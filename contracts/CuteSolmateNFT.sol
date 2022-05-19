@@ -1,16 +1,17 @@
-// Credit to Azuki
-// https://etherscan.io/address/0xed5af388653567af2f388e6224dc7c4b3241c544#code
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-import "./ERC721A.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
+import "@rari-capital/solmate/src/tokens/ERC721.sol";
+import "@rari-capital/solmate/src/auth/Owned.sol";
+import "@rari-capital/solmate/src/utils/ReentrancyGuard.sol";
 
-contract Cute721ANFT is ERC721A, Ownable, ReentrancyGuard {
+contract CuteSolmateNFT is ERC721, Owned, ReentrancyGuard {
     uint256 public immutable maxPerAddressDuringMint;
     uint256 public immutable reserveForTeam;
+    uint256 public totalSupply;
+    uint256 public collectionSize;
+
+    // uint256 public constant totalSupply = 10_000;
 
     struct SaleConfig {
         uint32 publicSaleStartTime;
@@ -27,7 +28,7 @@ contract Cute721ANFT is ERC721A, Ownable, ReentrancyGuard {
         uint256 maxBatchSize_,
         uint256 collectionSize_,
         uint256 reserveForTeam_
-    ) ERC721A("Cute", "CUTE", maxBatchSize_, collectionSize_) {
+    ) ERC721("Cute", "CUTE") Owned(msg.sender) {
         maxPerAddressDuringMint = maxBatchSize_;
         reserveForTeam = reserveForTeam_;
         require(
@@ -71,16 +72,16 @@ contract Cute721ANFT is ERC721A, Ownable, ReentrancyGuard {
     // For marketing etc.
     function devMint(uint256 quantity) external onlyOwner {
         require(
-            totalSupply() + quantity <= reserveForTeam,
+            totalSupply + quantity <= reserveForTeam,
             "too many already minted before dev mint"
         );
         require(
-            quantity % maxBatchSize == 0,
+            quantity % maxPerAddressDuringMint == 0,
             "can only mint a multiple of the maxBatchSize"
         );
-        uint256 numChunks = quantity / maxBatchSize;
+        uint256 numChunks = quantity / maxPerAddressDuringMint;
         for (uint256 i = 0; i < numChunks; i++) {
-            _safeMint(msg.sender, maxBatchSize);
+            _safeMint(msg.sender, maxPerAddressDuringMint);
         }
     }
 
@@ -106,7 +107,7 @@ contract Cute721ANFT is ERC721A, Ownable, ReentrancyGuard {
         uint256 price = uint256(saleConfig.mintlistPrice);
         require(price != 0, "allowlist sale has not begun yet");
         require(allowlist[msg.sender] > 0, "not eligible for allowlist mint");
-        require(totalSupply() + 1 <= collectionSize, "reached max supply");
+        require(totalSupply + 1 <= collectionSize, "reached max supply");
         allowlist[msg.sender]--;
         _safeMint(msg.sender, 1);
         refundIfOver(price);
@@ -130,22 +131,19 @@ contract Cute721ANFT is ERC721A, Ownable, ReentrancyGuard {
             isPublicSaleOn(publicPrice, publicSaleKey, publicSaleStartTime),
             "public sale has not begun yet"
         );
+        require(totalSupply + quantity <= collectionSize, "reached max supply");
         require(
-            totalSupply() + quantity <= collectionSize,
-            "reached max supply"
-        );
-        require(
-            numberMinted(msg.sender) + quantity <= maxPerAddressDuringMint,
+            balanceOf(msg.sender) + quantity <= maxPerAddressDuringMint,
             "can not mint this many"
         );
         _safeMint(msg.sender, quantity);
         refundIfOver(publicPrice * quantity);
     }
 
-    // // metadata URI
+    // metadata URI
     string private _baseTokenURI;
 
-    function _baseURI() internal view virtual override returns (string memory) {
+    function _baseURI() internal view returns (string memory) {
         return _baseTokenURI;
     }
 
@@ -153,28 +151,51 @@ contract Cute721ANFT is ERC721A, Ownable, ReentrancyGuard {
         _baseTokenURI = baseURI;
     }
 
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        virtual
+        override
+        returns (string memory)
+    {
+        require(
+            ownerOf(tokenId) != address(0),
+            "ERC721Metadata: URI query for nonexistent token"
+        );
+        return
+            bytes(_baseURI()).length > 0
+                ? string(abi.encodePacked(_baseURI(), toString(tokenId)))
+                : "";
+    }
+
     function withdrawMoney() external onlyOwner nonReentrant {
         (bool success, ) = msg.sender.call{value: address(this).balance}("");
         require(success, "Transfer failed.");
     }
 
-    function setOwnersExplicit(uint256 quantity)
-        external
-        onlyOwner
-        nonReentrant
-    {
-        _setOwnersExplicit(quantity);
-    }
+    /**
+     * @notice utility to convert uint256 to string for vaultID
+     * @param value uint256
+     */
+    function toString(uint256 value) internal pure returns (string memory) {
+        // From Openzeppelin's implementation - MIT licence
+        // https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/Strings.sol#L15-L35
 
-    function numberMinted(address _owner) public view returns (uint256) {
-        return _numberMinted(_owner);
-    }
-
-    function getOwnershipData(uint256 tokenId)
-        external
-        view
-        returns (TokenOwnership memory)
-    {
-        return ownershipOf(tokenId);
+        if (value == 0) {
+            return "0";
+        }
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
     }
 }
